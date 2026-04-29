@@ -1,6 +1,93 @@
-/* globals.css — minimal reset only, no design */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply text-foreground;
+    background-color: #f5b97a;
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(255, 209, 102, 0.5) 0%, transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(255, 107, 129, 0.4) 0%, transparent 45%),
+      radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.15) 0%, transparent 60%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' opacity='0.45'><circle cx='15' cy='20' r='3' fill='%23ffffff' stroke='none'/><path d='M40 12 L46 18 M46 12 L40 18'/><path d='M75 25 q4 -4 8 0 q4 4 8 0'/><circle cx='105' cy='15' r='4' fill='none'/><path d='M10 60 L16 60 M13 57 L13 63'/><circle cx='55' cy='55' r='2.5' fill='%23ffffff' stroke='none'/><path d='M88 65 q3 -3 6 0'/><path d='M25 95 L31 101 M31 95 L25 101'/><circle cx='65' cy='100' r='3' fill='none'/><path d='M100 95 q4 -4 8 0 q4 4 8 0'/></g></svg>"),
+      linear-gradient(135deg, #ffb27a 0%, #ff8e7a 50%, #ff7a9a 100%);
+    background-size: auto, auto, auto, 120px 120px, auto;
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  /* Gartic-style panel: thick border + solid drop shadow */
+  .gartic-panel {
+    border: 4px solid #4a1f2e;
+    box-shadow: 0 6px 0 0 #4a1f2e, 0 10px 24px rgba(0, 0, 0, 0.25);
+    border-radius: 1.25rem;
+  }
+
+  /* Gartic-style button: thick border + pushable effect */
+  .gartic-btn {
+    border: 3px solid #4a1f2e;
+    box-shadow: 0 4px 0 0 #4a1f2e;
+    border-radius: 0.875rem;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+    cursor: pointer;
+  }
+  .gartic-btn:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 0 #4a1f2e;
+  }
+  .gartic-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Halftone dot pattern */
+  .halftone {
+    background-image:
+      radial-gradient(circle, rgba(10, 35, 48, 0.08) 1px, transparent 1.4px);
+    background-size: 10px 10px;
+  }
+  .halftone-light {
+    background-image:
+      radial-gradient(circle, rgba(255, 255, 255, 0.18) 1px, transparent 1.4px);
+    background-size: 12px 12px;
+  }
+
+  /* Typography */
+  html {
+    font-size: 16px;
+  }
+  h1 { font-weight: 500; line-height: 1.5; }
+  h2 { font-weight: 500; line-height: 1.5; }
+  h3 { font-weight: 500; line-height: 1.5; }
+  label { font-weight: 500; line-height: 1.5; }
+  button { font-weight: 500; line-height: 1.5; }
+  input, select, textarea {
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --border: rgba(0, 0, 0, 0.1);
+  --ring: #888;
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }

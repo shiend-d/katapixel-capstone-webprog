@@ -1,21 +1,19 @@
 'use client';
-// app/page.tsx — SPA Root: switches views based on global state + socket events
-
 import { useEffect } from 'react';
-import { getSocket } from '../lib/socket';
-import { useGameStore } from '../lib/gameStore';
-import MainMenuView from '../components/views/MainMenuView';
-import LobbyView from '../components/views/LobbyView';
-import GameTextView from '../components/views/GameTextView';
-import GameCanvasView from '../components/views/GameCanvasView';
-import ShowcaseView from '../components/views/ShowcaseView';
+import { getSocket } from '@/lib/socket';
+import { useGameStore } from '@/lib/gameStore';
+import MainMenuView from '@/components/views/MainMenuView';
+import LobbyView from '@/components/views/LobbyView';
+import GameTextView from '@/components/views/GameTextView';
+import GameCanvasView from '@/components/views/GameCanvasView';
+import ShowcaseView from '@/components/views/ShowcaseView';
+import { X } from 'lucide-react';
 
 export default function Home() {
   const currentView = useGameStore((s) => s.currentView);
   const gamePhase = useGameStore((s) => s.gamePhase);
   const errorMessage = useGameStore((s) => s.errorMessage);
 
-  // ── Socket event wiring ───────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
     const store = useGameStore.getState;
@@ -36,19 +34,15 @@ export default function Home() {
     socket.on('room_state_update', (room) => {
       const state = store();
       useGameStore.getState().setRoomData(room);
-      // If we just joined and are on MAIN_MENU, move to LOBBY
       if (state.currentView === 'MAIN_MENU' && room) {
         set({ currentView: 'LOBBY' });
       }
-      // If showcase complete and room reset to LOBBY
       if (room?.status === 'LOBBY' && state.currentView === 'SHOWCASE') {
         useGameStore.getState().resetForLobby();
       }
     });
 
-    socket.on('game_started', () => {
-      // Wait for phase_sync to determine the actual view
-    });
+    socket.on('game_started', () => {});
 
     socket.on('phase_sync', (phase) => {
       useGameStore.getState().setGamePhase(phase);
@@ -88,7 +82,6 @@ export default function Home() {
 
     socket.on('error_alert', ({ message }) => {
       set({ errorMessage: message });
-      // If kicked or host DC, go back to main menu
       if (message.includes('dikeluarkan') || message.includes('dibubarkan') || message.includes('Host')) {
         setTimeout(() => {
           useGameStore.getState().resetAll();
@@ -113,39 +106,31 @@ export default function Home() {
     };
   }, []);
 
-  // ── Error popup ───────────────────────────────────────────────────────────
   const dismissError = () => useGameStore.getState().setErrorMessage(null);
 
-  // ── Render view ───────────────────────────────────────────────────────────
   let view: React.ReactNode;
-
   switch (currentView) {
-    case 'MAIN_MENU':
-      view = <MainMenuView />;
-      break;
-    case 'LOBBY':
-      view = <LobbyView />;
-      break;
+    case 'MAIN_MENU': view = <MainMenuView />; break;
+    case 'LOBBY': view = <LobbyView />; break;
     case 'GAME':
-      if (gamePhase?.expectedInput === 'CANVAS') {
-        view = <GameCanvasView />;
-      } else {
-        view = <GameTextView />;
-      }
+      view = gamePhase?.expectedInput === 'CANVAS' ? <GameCanvasView /> : <GameTextView />;
       break;
-    case 'SHOWCASE':
-      view = <ShowcaseView />;
-      break;
-    default:
-      view = <MainMenuView />;
+    case 'SHOWCASE': view = <ShowcaseView />; break;
+    default: view = <MainMenuView />;
   }
 
   return (
-    <div>
+    <div className="relative">
+      {/* Error popup */}
       {errorMessage && (
-        <div style={{ background: '#fee', border: '1px solid red', padding: 12, margin: 8 }}>
-          <strong>⚠️ Error:</strong> {errorMessage}
-          <button onClick={dismissError} style={{ marginLeft: 12 }}>✕</button>
+        <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2">
+          <div className="gartic-btn flex items-center gap-3 bg-[#ff5e5e] px-5 py-3 text-white"
+               style={{ fontWeight: 700, textShadow: '1px 1px 0 #4a1f2e' }}>
+            <span>⚠️ {errorMessage}</span>
+            <button onClick={dismissError} className="rounded-lg bg-[#4a1f2e]/30 p-1 hover:bg-[#4a1f2e]/50">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
       {view}
