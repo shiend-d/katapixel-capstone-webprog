@@ -1,65 +1,154 @@
-import Image from "next/image";
+'use client';
+// app/page.tsx — SPA Root: switches views based on global state + socket events
+
+import { useEffect } from 'react';
+import { getSocket } from '../lib/socket';
+import { useGameStore } from '../lib/gameStore';
+import MainMenuView from '../components/views/MainMenuView';
+import LobbyView from '../components/views/LobbyView';
+import GameTextView from '../components/views/GameTextView';
+import GameCanvasView from '../components/views/GameCanvasView';
+import ShowcaseView from '../components/views/ShowcaseView';
 
 export default function Home() {
+  const currentView = useGameStore((s) => s.currentView);
+  const gamePhase = useGameStore((s) => s.gamePhase);
+  const errorMessage = useGameStore((s) => s.errorMessage);
+
+  // ── Socket event wiring ───────────────────────────────────────────────────
+  useEffect(() => {
+    const socket = getSocket();
+    const store = useGameStore.getState;
+    const set = useGameStore.setState;
+
+    socket.on('connect', () => {
+      set({ mySocketId: socket.id || null });
+    });
+
+    socket.on('public_rooms_list', (rooms) => {
+      useGameStore.getState().setPublicRooms(rooms);
+    });
+
+    socket.on('room_created', () => {
+      set({ currentView: 'LOBBY' });
+    });
+
+    socket.on('room_state_update', (room) => {
+      const state = store();
+      useGameStore.getState().setRoomData(room);
+      // If we just joined and are on MAIN_MENU, move to LOBBY
+      if (state.currentView === 'MAIN_MENU' && room) {
+        set({ currentView: 'LOBBY' });
+      }
+      // If showcase complete and room reset to LOBBY
+      if (room?.status === 'LOBBY' && state.currentView === 'SHOWCASE') {
+        useGameStore.getState().resetForLobby();
+      }
+    });
+
+    socket.on('game_started', () => {
+      // Wait for phase_sync to determine the actual view
+    });
+
+    socket.on('phase_sync', (phase) => {
+      useGameStore.getState().setGamePhase(phase);
+      set({ currentView: 'GAME', hasSubmitted: false });
+    });
+
+    socket.on('timer_tick', ({ timeLeft }) => {
+      set({ timeLeft });
+    });
+
+    socket.on('showcase_start', () => {
+      set({
+        currentView: 'SHOWCASE',
+        showcaseEntries: [],
+        showcaseAlbumDone: false,
+        showcaseComplete: false,
+        showcaseAlbumHeader: null,
+      });
+    });
+
+    socket.on('showcase_album_header', (header) => {
+      useGameStore.getState().setShowcaseAlbumHeader(header);
+      useGameStore.getState().resetForNewAlbum();
+    });
+
+    socket.on('showcase_step', (entry) => {
+      useGameStore.getState().addShowcaseEntry(entry);
+    });
+
+    socket.on('showcase_album_done', () => {
+      set({ showcaseAlbumDone: true });
+    });
+
+    socket.on('showcase_complete', () => {
+      set({ showcaseComplete: true });
+    });
+
+    socket.on('error_alert', ({ message }) => {
+      set({ errorMessage: message });
+      // If kicked or host DC, go back to main menu
+      if (message.includes('dikeluarkan') || message.includes('dibubarkan') || message.includes('Host')) {
+        setTimeout(() => {
+          useGameStore.getState().resetAll();
+        }, 2000);
+      }
+    });
+
+    return () => {
+      socket.off('connect');
+      socket.off('public_rooms_list');
+      socket.off('room_created');
+      socket.off('room_state_update');
+      socket.off('game_started');
+      socket.off('phase_sync');
+      socket.off('timer_tick');
+      socket.off('showcase_start');
+      socket.off('showcase_album_header');
+      socket.off('showcase_step');
+      socket.off('showcase_album_done');
+      socket.off('showcase_complete');
+      socket.off('error_alert');
+    };
+  }, []);
+
+  // ── Error popup ───────────────────────────────────────────────────────────
+  const dismissError = () => useGameStore.getState().setErrorMessage(null);
+
+  // ── Render view ───────────────────────────────────────────────────────────
+  let view: React.ReactNode;
+
+  switch (currentView) {
+    case 'MAIN_MENU':
+      view = <MainMenuView />;
+      break;
+    case 'LOBBY':
+      view = <LobbyView />;
+      break;
+    case 'GAME':
+      if (gamePhase?.expectedInput === 'CANVAS') {
+        view = <GameCanvasView />;
+      } else {
+        view = <GameTextView />;
+      }
+      break;
+    case 'SHOWCASE':
+      view = <ShowcaseView />;
+      break;
+    default:
+      view = <MainMenuView />;
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      {errorMessage && (
+        <div style={{ background: '#fee', border: '1px solid red', padding: 12, margin: 8 }}>
+          <strong>⚠️ Error:</strong> {errorMessage}
+          <button onClick={dismissError} style={{ marginLeft: 12 }}>✕</button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+      {view}
     </div>
   );
 }
