@@ -21,6 +21,8 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@csstools/css-parser-algorithms": "^3.0.5",
+    "@csstools/css-tokenizer": "^3.0.4",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
