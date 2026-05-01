@@ -65,7 +65,8 @@ export default function Home() {
 
     socket.on('showcase_album_header', (header) => {
       useGameStore.getState().setShowcaseAlbumHeader(header);
-      useGameStore.getState().resetForNewAlbum();
+      // Sync currentAlbumIndex from server-sent header
+      set({ showcaseEntries: [], showcaseAlbumDone: false, currentAlbumIndex: header.albumIndex });
     });
 
     socket.on('showcase_step', (entry) => {

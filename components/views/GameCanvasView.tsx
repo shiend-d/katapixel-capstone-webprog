@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Timer, Pencil, Eraser, Square, Circle, Minus, PaintBucket, Undo2, Redo2, Trash2, Check } from 'lucide-react';
+import { Timer, Pencil, Eraser, Square, Circle, Triangle, Minus, PaintBucket, Undo2, Redo2, Trash2, Check } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/lib/gameStore';
+import { CURSOR_PENCIL, CURSOR_ERASER } from '@/lib/cursors';
+import { drawTriangle } from '@/lib/canvasShapes';
 
-type Tool = 'pencil' | 'eraser' | 'rect' | 'circle' | 'line' | 'fill';
+type Tool = 'pencil' | 'eraser' | 'rect' | 'circle' | 'triangle' | 'line' | 'fill';
 
 const COLORS = [
   '#000000', '#ffffff', '#ef4444', '#f59e0b',
@@ -17,6 +19,7 @@ const TOOLS: { id: Tool; icon: React.ElementType; label: string }[] = [
   { id: 'eraser', icon: Eraser, label: 'Hapus' },
   { id: 'rect', icon: Square, label: 'Kotak' },
   { id: 'circle', icon: Circle, label: 'Lingkaran' },
+  { id: 'triangle', icon: Triangle, label: 'Segitiga' },
   { id: 'line', icon: Minus, label: 'Garis' },
   { id: 'fill', icon: PaintBucket, label: 'Isi' },
 ];
@@ -31,6 +34,7 @@ export default function GameCanvasView() {
   const [tool, setTool] = useState<Tool>('pencil');
   const [color, setColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(5);
+  const isEraser = tool === 'eraser';
 
   const isDrawing = useRef(false);
   const startPos = useRef({ x: 0, y: 0 });
@@ -59,6 +63,17 @@ export default function GameCanvasView() {
     saveToUndoStack();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-submit saat timer habis (mencegah double submission dengan hasSubmitted)
+  useEffect(() => {
+    if (timeLeft === 0 && !hasSubmitted && gamePhase?.expectedInput === 'CANVAS') {
+      const timer = setTimeout(() => {
+        handleSubmit();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, hasSubmitted, gamePhase]);
 
   function getCtx() { return canvasRef.current?.getContext('2d') ?? null; }
 
@@ -152,7 +167,7 @@ export default function GameCanvasView() {
       ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
       ctx.lineWidth = brushSize; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     }
-    if (tool === 'rect' || tool === 'circle' || tool === 'line') {
+    if (tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'line') {
       const dpr = window.devicePixelRatio || 1;
       snapshot.current = ctx.getImageData(0, 0, CANVAS_W * dpr, CANVAS_H * dpr);
     }
@@ -162,7 +177,7 @@ export default function GameCanvasView() {
     if (!isDrawing.current) return;
     const pos = getPos(e); const ctx = getCtx(); if (!ctx) return;
     if (tool === 'pencil' || tool === 'eraser') { ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
-    if ((tool === 'rect' || tool === 'circle' || tool === 'line') && snapshot.current) {
+    if ((tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'line') && snapshot.current) {
       ctx.putImageData(snapshot.current, 0, 0);
       ctx.strokeStyle = color; ctx.lineWidth = brushSize; ctx.lineCap = 'round';
       const sx = startPos.current.x, sy = startPos.current.y;
@@ -172,6 +187,8 @@ export default function GameCanvasView() {
         ctx.beginPath();
         ctx.ellipse(sx + w/2, sy + h/2, Math.abs(w)/2, Math.abs(h)/2, 0, 0, Math.PI*2);
         ctx.stroke();
+      } else if (tool === 'triangle') {
+        drawTriangle(ctx, sx, sy, pos.x, pos.y, color, brushSize);
       } else if (tool === 'line') {
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(pos.x, pos.y); ctx.stroke();
       }
@@ -242,7 +259,7 @@ export default function GameCanvasView() {
           <div className="gartic-panel bg-white p-3">
             <canvas ref={canvasRef}
               className="halftone w-full rounded-xl border-[3px] border-[#4a1f2e] bg-[#fff8e1]"
-              style={{ touchAction: 'none', cursor: 'crosshair', aspectRatio: `${CANVAS_W}/${CANVAS_H}` }}
+              style={{ touchAction: 'none', cursor: isEraser ? CURSOR_ERASER : CURSOR_PENCIL, aspectRatio: `${CANVAS_W}/${CANVAS_H}` }}
               onMouseDown={handlePointerDown} onMouseMove={handlePointerMove}
               onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp}
               onTouchStart={handlePointerDown} onTouchMove={handlePointerMove} onTouchEnd={handlePointerUp}
