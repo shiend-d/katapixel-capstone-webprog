@@ -372,14 +372,6 @@ app.prepare().then(() => {
       sendNextShowcaseAlbum(io, room);
     });
 
-    // Allow clients to request a previously finished album for re-viewing
-    socket.on('request_album', ({ albumIndex }) => {
-      const room = rooms.get(socket.data.roomId);
-      if (!room || room.status !== 'SHOWCASE') return;
-      const album = room._finishedShowcaseAlbums?.[albumIndex];
-      if (!album) return;
-      socket.emit('replay_album', album);
-    });
 
     socket.on('disconnect', () => {
       console.log(`[-] ${socket.id} disconnected`);

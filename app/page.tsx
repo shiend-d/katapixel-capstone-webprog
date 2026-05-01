@@ -60,41 +60,42 @@ export default function Home() {
         showcaseAlbumDone: false,
         showcaseComplete: false,
         showcaseAlbumHeader: null,
+        finishedAlbums: [],
+        isReviewingPast: false,
       });
     });
 
     socket.on('showcase_album_header', (header) => {
+      // When a new live album header arrives, exit any past-review mode
       useGameStore.getState().setShowcaseAlbumHeader(header);
-      // Sync currentAlbumIndex from server-sent header
-      set({ showcaseEntries: [], showcaseAlbumDone: false, currentAlbumIndex: header.albumIndex });
+      set({
+        showcaseEntries: [],
+        showcaseAlbumDone: false,
+        currentAlbumIndex: header.albumIndex,
+        isReviewingPast: false,
+      });
     });
 
     socket.on('showcase_step', (entry) => {
+      // addShowcaseEntry already checks isReviewingPast
       useGameStore.getState().addShowcaseEntry(entry);
     });
 
     socket.on('showcase_album_done', () => {
+      // Save current album to finishedAlbums before marking done
+      useGameStore.getState().saveCurrentAlbum();
       set({ showcaseAlbumDone: true });
     });
 
     socket.on('showcase_complete', () => {
+      // Save the last album if not saved yet
+      useGameStore.getState().saveCurrentAlbum();
       set({ showcaseComplete: true });
     });
 
     // Server signals timeout — auto-submit current work
     socket.on('force_auto_submit', () => {
       set({ timeLeft: 0 });
-      // The individual view components watch timeLeft===0 and auto-submit
-    });
-
-    // Replay a previously-seen album
-    socket.on('replay_album', (albumData) => {
-      set({
-        showcaseAlbumHeader: albumData.header,
-        showcaseEntries: albumData.entries,
-        showcaseAlbumDone: true,
-        currentAlbumIndex: albumData.header.albumIndex,
-      });
     });
 
     socket.on('error_alert', ({ message }) => {
@@ -120,7 +121,6 @@ export default function Home() {
       socket.off('showcase_album_done');
       socket.off('showcase_complete');
       socket.off('force_auto_submit');
-      socket.off('replay_album');
       socket.off('error_alert');
     };
   }, []);
@@ -140,7 +140,6 @@ export default function Home() {
 
   return (
     <div className="relative">
-      {/* Error popup */}
       {errorMessage && (
         <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2">
           <div className="gartic-btn flex items-center gap-3 bg-[#ff5e5e] px-5 py-3 text-white"

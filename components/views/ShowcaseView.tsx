@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useRef } from 'react';
-import { ArrowRight, ArrowLeft, Download, Home, MessageSquare, Image as ImageIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, ArrowLeft, Download, Home, MessageSquare, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/lib/gameStore';
 import { downloadAlbumAsPng } from '@/lib/downloadAlbum';
@@ -14,7 +14,10 @@ export default function ShowcaseView() {
   const myIsHost = useGameStore((s) => s.myIsHost);
   const roomData = useGameStore((s) => s.roomData);
   const currentAlbumIndex = useGameStore((s) => s.currentAlbumIndex);
+  const finishedAlbums = useGameStore((s) => s.finishedAlbums);
+  const isReviewingPast = useGameStore((s) => s.isReviewingPast);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -29,20 +32,36 @@ export default function ShowcaseView() {
 
   function handlePreviousAlbum() {
     if (currentAlbumIndex <= 0) return;
-    const prevIdx = currentAlbumIndex - 1;
-    getSocket().emit('request_album', { albumIndex: prevIdx });
+    useGameStore.getState().viewPastAlbum(currentAlbumIndex - 1);
   }
 
-  function handleDownloadAlbum() {
+  async function handleDownloadAlbum() {
     if (!showcaseAlbumHeader || showcaseEntries.length === 0) return;
-    downloadAlbumAsPng(
-      showcaseAlbumHeader.ownerName,
-      AVATARS[showcaseAlbumHeader.ownerAvatarId],
-      showcaseEntries,
-    );
+    setIsDownloading(true);
+    try {
+      await downloadAlbumAsPng(
+        showcaseAlbumHeader.ownerName,
+        AVATARS[showcaseAlbumHeader.ownerAvatarId],
+        showcaseEntries,
+      );
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Gagal mengunduh album. Coba lagi.');
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   function handleBackToLobby() { useGameStore.getState().resetForLobby(); }
+
+  // Can go back to live if reviewing and there's a newer album being shown
+  const canReturnToLive = isReviewingPast && !showcaseComplete;
+
+  function handleReturnToLive() {
+    // The live data will be restored when the next showcase_album_header/step comes in.
+    // For now just clear the reviewing flag so new events populate again.
+    useGameStore.getState().returnToLive();
+  }
 
   const players = roomData?.players ?? [];
 
@@ -66,9 +85,16 @@ export default function ShowcaseView() {
             </span>
           </div>
           {showcaseAlbumHeader ? (
-            <span className="rounded-lg border-[3px] border-[#4a1f2e] bg-[#fff5e1] px-3 py-1.5 text-sm text-[#9a3556]" style={{ fontWeight: 700 }}>
-              ALBUM {showcaseAlbumHeader.albumIndex + 1}/{showcaseAlbumHeader.totalAlbums}
-            </span>
+            <div className="flex items-center gap-2">
+              {isReviewingPast && (
+                <span className="rounded-lg border-[3px] border-[#ffe066] bg-[#ffe066] px-2 py-0.5 text-xs text-[#4a1f2e]" style={{ fontWeight: 700 }}>
+                  RIWAYAT
+                </span>
+              )}
+              <span className="rounded-lg border-[3px] border-[#4a1f2e] bg-[#fff5e1] px-3 py-1.5 text-sm text-[#9a3556]" style={{ fontWeight: 700 }}>
+                ALBUM {showcaseAlbumHeader.albumIndex + 1}/{showcaseAlbumHeader.totalAlbums}
+              </span>
+            </div>
           ) : <div />}
         </div>
 
@@ -100,29 +126,38 @@ export default function ShowcaseView() {
           <div className="gartic-panel bg-[#fff5e1] p-5">
             {/* Album owner header */}
             {showcaseAlbumHeader && (
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[#4a1f2e]" style={{ fontWeight: 800 }}>
                   {AVATARS[showcaseAlbumHeader.ownerAvatarId]} Album Milik {showcaseAlbumHeader.ownerName}
                 </h2>
-                <div className="flex gap-2">
-                  {/* Download button */}
+                <div className="flex flex-wrap gap-2">
+                  {/* Download */}
                   {showcaseAlbumDone && (
-                    <button onClick={handleDownloadAlbum}
+                    <button onClick={handleDownloadAlbum} disabled={isDownloading}
                       className="gartic-btn flex items-center gap-1.5 bg-[#9a5dff] px-4 py-2 text-sm text-white hover:bg-[#8047d8]"
                       style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
-                      <Download className="h-4 w-4" /> UNDUH
+                      {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      {isDownloading ? 'MENGUNDUH...' : 'UNDUH'}
                     </button>
                   )}
-                  {/* Previous album (anyone can re-view) */}
-                  {showcaseAlbumDone && currentAlbumIndex > 0 && (
+                  {/* Previous album — available when there are finished albums before current */}
+                  {showcaseAlbumDone && currentAlbumIndex > 0 && finishedAlbums.some(a => a.header.albumIndex < currentAlbumIndex) && (
                     <button onClick={handlePreviousAlbum}
                       className="gartic-btn flex items-center gap-1.5 bg-[#ffa500] px-4 py-2 text-sm text-white hover:bg-[#ff8c00]"
                       style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
                       <ArrowLeft className="h-4 w-4" /> SEBELUMNYA
                     </button>
                   )}
-                  {/* Next album (host only, during live flow) */}
-                  {myIsHost && showcaseAlbumDone && !showcaseComplete && (
+                  {/* Return to live album */}
+                  {canReturnToLive && (
+                    <button onClick={handleReturnToLive}
+                      className="gartic-btn flex items-center gap-1.5 bg-[#2ec4b6] px-4 py-2 text-sm text-white"
+                      style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
+                      LIVE ▶
+                    </button>
+                  )}
+                  {/* Next album (host only) */}
+                  {myIsHost && showcaseAlbumDone && !showcaseComplete && !isReviewingPast && (
                     <button onClick={handleNextAlbum}
                       className="gartic-btn flex items-center gap-1.5 bg-gradient-to-b from-[#7bd389] to-[#3fb56b] px-4 py-2 text-sm text-white"
                       style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
@@ -149,11 +184,9 @@ export default function ShowcaseView() {
                 return (
                   <div key={i} className={`flex ${onLeft ? 'justify-start' : 'justify-end'}`}>
                     <div className={`flex max-w-[80%] gap-2 ${onLeft ? 'flex-row' : 'flex-row-reverse'}`}>
-                      {/* Avatar */}
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[3px] border-[#4a1f2e] bg-[#ffe066] text-lg">
                         {AVATARS[entry.authorAvatarId ?? 0]}
                       </div>
-                      {/* Content */}
                       <div className={onLeft ? 'text-left' : 'text-right'}>
                         <div className={`mb-1 flex items-center gap-1.5 ${onLeft ? '' : 'justify-end'}`}>
                           <span className="text-[#4a1f2e]" style={{ fontWeight: 700 }}>{entry.authorName || '?'}</span>
@@ -167,7 +200,6 @@ export default function ShowcaseView() {
                           </span>
                         </div>
 
-                        {/* TEXT bubble */}
                         {(entry.type === 'TEXT' || entry.type === 'FALLBACK_TEXT') && (
                           <div className={`inline-block border-[3px] border-[#4a1f2e] px-4 py-2.5 shadow-[0_3px_0_0_#4a1f2e] ${
                             onLeft ? 'rounded-2xl rounded-tl-sm' : 'rounded-2xl rounded-tr-sm'
@@ -177,14 +209,12 @@ export default function ShowcaseView() {
                           </div>
                         )}
 
-                        {/* EMPTY_CANVAS */}
                         {entry.type === 'EMPTY_CANVAS' && (
                           <div className="halftone flex aspect-[16/9] w-[28rem] max-w-full items-center justify-center rounded-xl border-[3px] border-dashed border-[#4a1f2e]/50 bg-[#fff8e1] text-[#4a1f2e]/60 italic">
                             [Tidak ada gambar]
                           </div>
                         )}
 
-                        {/* IMAGE */}
                         {entry.type === 'IMAGE' && (
                           <div className="halftone w-[28rem] max-w-full overflow-hidden rounded-xl border-[3px] border-[#4a1f2e] bg-[#fff8e1] shadow-[0_3px_0_0_#4a1f2e]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -199,8 +229,8 @@ export default function ShowcaseView() {
               })}
             </div>
 
-            {/* Status messages */}
-            {!myIsHost && showcaseAlbumDone && !showcaseComplete && (
+            {/* Status */}
+            {!myIsHost && showcaseAlbumDone && !showcaseComplete && !isReviewingPast && (
               <div className="mt-4 text-center text-sm text-[#9a3556] italic">
                 Menunggu Host menekan &quot;Berikutnya&quot;...
               </div>

@@ -61,3 +61,8 @@ export interface ShowcaseAlbumHeader {
 }
 
 export type AppView = 'MAIN_MENU' | 'LOBBY' | 'GAME' | 'SHOWCASE';
+
+export interface FinishedAlbum {
+  header: ShowcaseAlbumHeader;
+  entries: Entry[];
+}

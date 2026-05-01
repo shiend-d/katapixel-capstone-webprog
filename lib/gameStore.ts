@@ -1,6 +1,6 @@
 // lib/gameStore.ts — Zustand global state for Katapixel
 import { create } from 'zustand';
-import type { AppView, Room, PhaseSync, PublicRoom, ShowcaseAlbumHeader, Entry, AvatarId } from './types';
+import type { AppView, Room, PhaseSync, PublicRoom, ShowcaseAlbumHeader, Entry, AvatarId, FinishedAlbum } from './types';
 
 interface GameState {
   // Navigation
@@ -20,13 +20,16 @@ interface GameState {
   timeLeft: number;
   hasSubmitted: boolean;
 
-  // Showcase
+  // Showcase — live stream
   showcaseAlbumHeader: ShowcaseAlbumHeader | null;
   showcaseEntries: Entry[];
   showcaseAlbumDone: boolean;
   showcaseComplete: boolean;
   currentAlbumIndex: number;
-  allAlbums: Entry[][];
+
+  // Showcase — client-side album storage for re-navigation
+  finishedAlbums: FinishedAlbum[];
+  isReviewingPast: boolean;  // true when user is viewing a previously finished album
 
   // Public rooms
   publicRooms: PublicRoom[];
@@ -45,18 +48,21 @@ interface GameState {
   setHasSubmitted: (v: boolean) => void;
   setShowcaseAlbumHeader: (h: ShowcaseAlbumHeader | null) => void;
   addShowcaseEntry: (e: Entry) => void;
-  setShowcaseAlbumDone: (v: boolean) => void;
-  setShowcaseComplete: (v: boolean) => void;
-  setCurrentAlbumIndex: (index: number) => void;
-  setAllAlbums: (albums: Entry[][]) => void;
   setPublicRooms: (rooms: PublicRoom[]) => void;
   setErrorMessage: (msg: string | null) => void;
-  resetForNewAlbum: () => void;
+
+  // Save the current live album into finishedAlbums
+  saveCurrentAlbum: () => void;
+  // View a previously finished album by index
+  viewPastAlbum: (albumIndex: number) => void;
+  // Return from reviewing to the current live state
+  returnToLive: () => void;
+
   resetForLobby: () => void;
   resetAll: () => void;
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   currentView: 'MAIN_MENU',
   mySocketId: null,
   myUsername: '',
@@ -71,7 +77,8 @@ export const useGameStore = create<GameState>((set) => ({
   showcaseAlbumDone: false,
   showcaseComplete: false,
   currentAlbumIndex: 0,
-  allAlbums: [],
+  finishedAlbums: [],
+  isReviewingPast: false,
   publicRooms: [],
   errorMessage: null,
 
@@ -93,14 +100,48 @@ export const useGameStore = create<GameState>((set) => ({
   setTimeLeft: (t) => set({ timeLeft: t }),
   setHasSubmitted: (v) => set({ hasSubmitted: v }),
   setShowcaseAlbumHeader: (h) => set({ showcaseAlbumHeader: h }),
-  addShowcaseEntry: (e) => set((state) => ({ showcaseEntries: [...state.showcaseEntries, e] })),
-  setShowcaseAlbumDone: (v) => set({ showcaseAlbumDone: v }),
-  setShowcaseComplete: (v) => set({ showcaseComplete: v }),
-  setCurrentAlbumIndex: (index) => set({ currentAlbumIndex: index }),
-  setAllAlbums: (albums) => set({ allAlbums: albums }),
+  addShowcaseEntry: (e) => {
+    // Only add entries if not reviewing a past album
+    const state = get();
+    if (state.isReviewingPast) return;
+    set({ showcaseEntries: [...state.showcaseEntries, e] });
+  },
   setPublicRooms: (rooms) => set({ publicRooms: rooms }),
   setErrorMessage: (msg) => set({ errorMessage: msg }),
-  resetForNewAlbum: () => set({ showcaseEntries: [], showcaseAlbumDone: false, currentAlbumIndex: 0 }),
+
+  saveCurrentAlbum: () => {
+    const state = get();
+    if (!state.showcaseAlbumHeader) return;
+    // Avoid duplicates
+    const exists = state.finishedAlbums.some(
+      (a) => a.header.albumIndex === state.showcaseAlbumHeader!.albumIndex
+    );
+    if (exists) return;
+    const album: FinishedAlbum = {
+      header: { ...state.showcaseAlbumHeader },
+      entries: [...state.showcaseEntries],
+    };
+    set({ finishedAlbums: [...state.finishedAlbums, album] });
+  },
+
+  viewPastAlbum: (albumIndex: number) => {
+    const state = get();
+    const album = state.finishedAlbums.find((a) => a.header.albumIndex === albumIndex);
+    if (!album) return;
+    set({
+      isReviewingPast: true,
+      showcaseAlbumHeader: { ...album.header },
+      showcaseEntries: [...album.entries],
+      showcaseAlbumDone: true,
+      currentAlbumIndex: albumIndex,
+    });
+  },
+
+  returnToLive: () => {
+    // This will be triggered automatically when showcase_album_header arrives
+    set({ isReviewingPast: false });
+  },
+
   resetForLobby: () => set({
     currentView: 'LOBBY',
     gamePhase: null,
@@ -111,7 +152,8 @@ export const useGameStore = create<GameState>((set) => ({
     showcaseAlbumDone: false,
     showcaseComplete: false,
     currentAlbumIndex: 0,
-    allAlbums: [],
+    finishedAlbums: [],
+    isReviewingPast: false,
   }),
   resetAll: () => set({
     currentView: 'MAIN_MENU',
@@ -124,6 +166,9 @@ export const useGameStore = create<GameState>((set) => ({
     showcaseEntries: [],
     showcaseAlbumDone: false,
     showcaseComplete: false,
+    currentAlbumIndex: 0,
+    finishedAlbums: [],
+    isReviewingPast: false,
     errorMessage: null,
   }),
 }));
