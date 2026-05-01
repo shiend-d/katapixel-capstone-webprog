@@ -19,109 +19,67 @@ export default function Home() {
     const store = useGameStore.getState;
     const set = useGameStore.setState;
 
-    socket.on('connect', () => {
-      set({ mySocketId: socket.id || null });
-    });
-
-    socket.on('public_rooms_list', (rooms) => {
-      useGameStore.getState().setPublicRooms(rooms);
-    });
-
-    socket.on('room_created', () => {
-      set({ currentView: 'LOBBY' });
-    });
+    socket.on('connect', () => { set({ mySocketId: socket.id || null }); });
+    socket.on('public_rooms_list', (rooms) => { store().setPublicRooms(rooms); });
+    socket.on('room_created', () => { set({ currentView: 'LOBBY' }); });
 
     socket.on('room_state_update', (room) => {
-      const state = store();
-      useGameStore.getState().setRoomData(room);
-      if (state.currentView === 'MAIN_MENU' && room) {
-        set({ currentView: 'LOBBY' });
-      }
-      if (room?.status === 'LOBBY' && state.currentView === 'SHOWCASE') {
-        useGameStore.getState().resetForLobby();
-      }
+      const s = store();
+      store().setRoomData(room);
+      if (s.currentView === 'MAIN_MENU' && room) set({ currentView: 'LOBBY' });
+      if (room?.status === 'LOBBY' && s.currentView === 'SHOWCASE') store().resetForLobby();
     });
 
     socket.on('game_started', () => {});
-
     socket.on('phase_sync', (phase) => {
-      useGameStore.getState().setGamePhase(phase);
+      store().setGamePhase(phase);
       set({ currentView: 'GAME', hasSubmitted: false });
     });
-
-    socket.on('timer_tick', ({ timeLeft }) => {
-      set({ timeLeft });
-    });
+    socket.on('timer_tick', ({ timeLeft }) => { set({ timeLeft }); });
 
     socket.on('showcase_start', () => {
       set({
         currentView: 'SHOWCASE',
-        showcaseEntries: [],
-        showcaseAlbumDone: false,
-        showcaseComplete: false,
-        showcaseAlbumHeader: null,
+        showcaseEntries: [], showcaseAlbumDone: false,
+        showcaseComplete: false, showcaseAlbumHeader: null,
         finishedAlbums: [],
-        isReviewingPast: false,
       });
     });
 
     socket.on('showcase_album_header', (header) => {
-      // When a new live album header arrives, exit any past-review mode
-      useGameStore.getState().setShowcaseAlbumHeader(header);
-      set({
-        showcaseEntries: [],
-        showcaseAlbumDone: false,
-        currentAlbumIndex: header.albumIndex,
-        isReviewingPast: false,
-      });
+      store().setShowcaseAlbumHeader(header);
+      set({ showcaseEntries: [], showcaseAlbumDone: false, currentAlbumIndex: header.albumIndex });
     });
 
-    socket.on('showcase_step', (entry) => {
-      // addShowcaseEntry already checks isReviewingPast
-      useGameStore.getState().addShowcaseEntry(entry);
-    });
+    socket.on('showcase_step', (entry) => { store().addShowcaseEntry(entry); });
 
     socket.on('showcase_album_done', () => {
-      // Save current album to finishedAlbums before marking done
-      useGameStore.getState().saveCurrentAlbum();
+      store().saveCurrentAlbum();
       set({ showcaseAlbumDone: true });
     });
 
     socket.on('showcase_complete', () => {
-      // Save the last album if not saved yet
-      useGameStore.getState().saveCurrentAlbum();
+      store().saveCurrentAlbum();
       set({ showcaseComplete: true });
     });
 
-    // Server signals timeout — auto-submit current work
-    socket.on('force_auto_submit', () => {
-      set({ timeLeft: 0 });
-    });
+    socket.on('force_auto_submit', () => { set({ timeLeft: 0 }); });
 
     socket.on('error_alert', ({ message }) => {
       set({ errorMessage: message });
       if (message.includes('dikeluarkan') || message.includes('dibubarkan') || message.includes('Host')) {
-        setTimeout(() => {
-          useGameStore.getState().resetAll();
-        }, 2000);
+        setTimeout(() => { store().resetAll(); }, 2000);
       }
     });
 
     return () => {
-      socket.off('connect');
-      socket.off('public_rooms_list');
-      socket.off('room_created');
-      socket.off('room_state_update');
-      socket.off('game_started');
-      socket.off('phase_sync');
-      socket.off('timer_tick');
-      socket.off('showcase_start');
-      socket.off('showcase_album_header');
-      socket.off('showcase_step');
-      socket.off('showcase_album_done');
-      socket.off('showcase_complete');
-      socket.off('force_auto_submit');
-      socket.off('error_alert');
+      socket.off('connect'); socket.off('public_rooms_list');
+      socket.off('room_created'); socket.off('room_state_update');
+      socket.off('game_started'); socket.off('phase_sync');
+      socket.off('timer_tick'); socket.off('showcase_start');
+      socket.off('showcase_album_header'); socket.off('showcase_step');
+      socket.off('showcase_album_done'); socket.off('showcase_complete');
+      socket.off('force_auto_submit'); socket.off('error_alert');
     };
   }, []);
 

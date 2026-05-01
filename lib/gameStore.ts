@@ -3,38 +3,25 @@ import { create } from 'zustand';
 import type { AppView, Room, PhaseSync, PublicRoom, ShowcaseAlbumHeader, Entry, AvatarId, FinishedAlbum } from './types';
 
 interface GameState {
-  // Navigation
   currentView: AppView;
-
-  // My player
   mySocketId: string | null;
   myUsername: string;
   myAvatarId: AvatarId;
   myIsHost: boolean;
-
-  // Room
   roomData: Room | null;
-
-  // Game phase
   gamePhase: PhaseSync | null;
   timeLeft: number;
   hasSubmitted: boolean;
 
-  // Showcase — live stream
+  // Showcase
   showcaseAlbumHeader: ShowcaseAlbumHeader | null;
   showcaseEntries: Entry[];
   showcaseAlbumDone: boolean;
   showcaseComplete: boolean;
   currentAlbumIndex: number;
-
-  // Showcase — client-side album storage for re-navigation
   finishedAlbums: FinishedAlbum[];
-  isReviewingPast: boolean;  // true when user is viewing a previously finished album
 
-  // Public rooms
   publicRooms: PublicRoom[];
-
-  // Error
   errorMessage: string | null;
 
   // Actions
@@ -50,14 +37,8 @@ interface GameState {
   addShowcaseEntry: (e: Entry) => void;
   setPublicRooms: (rooms: PublicRoom[]) => void;
   setErrorMessage: (msg: string | null) => void;
-
-  // Save the current live album into finishedAlbums
   saveCurrentAlbum: () => void;
-  // View a previously finished album by index
-  viewPastAlbum: (albumIndex: number) => void;
-  // Return from reviewing to the current live state
-  returnToLive: () => void;
-
+  viewAlbumByPlayer: (playerName: string, playerAvatarId: AvatarId) => void;
   resetForLobby: () => void;
   resetAll: () => void;
 }
@@ -78,7 +59,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   showcaseComplete: false,
   currentAlbumIndex: 0,
   finishedAlbums: [],
-  isReviewingPast: false,
   publicRooms: [],
   errorMessage: null,
 
@@ -100,75 +80,50 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTimeLeft: (t) => set({ timeLeft: t }),
   setHasSubmitted: (v) => set({ hasSubmitted: v }),
   setShowcaseAlbumHeader: (h) => set({ showcaseAlbumHeader: h }),
-  addShowcaseEntry: (e) => {
-    // Only add entries if not reviewing a past album
-    const state = get();
-    if (state.isReviewingPast) return;
-    set({ showcaseEntries: [...state.showcaseEntries, e] });
-  },
+  addShowcaseEntry: (e) => set((s) => ({ showcaseEntries: [...s.showcaseEntries, e] })),
   setPublicRooms: (rooms) => set({ publicRooms: rooms }),
   setErrorMessage: (msg) => set({ errorMessage: msg }),
 
   saveCurrentAlbum: () => {
-    const state = get();
-    if (!state.showcaseAlbumHeader) return;
-    // Avoid duplicates
-    const exists = state.finishedAlbums.some(
-      (a) => a.header.albumIndex === state.showcaseAlbumHeader!.albumIndex
-    );
+    const s = get();
+    if (!s.showcaseAlbumHeader) return;
+    const exists = s.finishedAlbums.some((a) => a.header.albumIndex === s.showcaseAlbumHeader!.albumIndex);
     if (exists) return;
-    const album: FinishedAlbum = {
-      header: { ...state.showcaseAlbumHeader },
-      entries: [...state.showcaseEntries],
-    };
-    set({ finishedAlbums: [...state.finishedAlbums, album] });
-  },
-
-  viewPastAlbum: (albumIndex: number) => {
-    const state = get();
-    const album = state.finishedAlbums.find((a) => a.header.albumIndex === albumIndex);
-    if (!album) return;
     set({
-      isReviewingPast: true,
-      showcaseAlbumHeader: { ...album.header },
-      showcaseEntries: [...album.entries],
-      showcaseAlbumDone: true,
-      currentAlbumIndex: albumIndex,
+      finishedAlbums: [...s.finishedAlbums, {
+        header: { ...s.showcaseAlbumHeader },
+        entries: [...s.showcaseEntries],
+      }],
     });
   },
 
-  returnToLive: () => {
-    // This will be triggered automatically when showcase_album_header arrives
-    set({ isReviewingPast: false });
+  // View a specific player's album (used after showcase completes)
+  viewAlbumByPlayer: (playerName, playerAvatarId) => {
+    const s = get();
+    const album = s.finishedAlbums.find(
+      (a) => a.header.ownerName === playerName && a.header.ownerAvatarId === playerAvatarId
+    );
+    if (!album) return;
+    set({
+      showcaseAlbumHeader: { ...album.header },
+      showcaseEntries: [...album.entries],
+      showcaseAlbumDone: true,
+      currentAlbumIndex: album.header.albumIndex,
+    });
   },
 
   resetForLobby: () => set({
     currentView: 'LOBBY',
-    gamePhase: null,
-    timeLeft: 0,
-    hasSubmitted: false,
-    showcaseAlbumHeader: null,
-    showcaseEntries: [],
-    showcaseAlbumDone: false,
-    showcaseComplete: false,
-    currentAlbumIndex: 0,
-    finishedAlbums: [],
-    isReviewingPast: false,
+    gamePhase: null, timeLeft: 0, hasSubmitted: false,
+    showcaseAlbumHeader: null, showcaseEntries: [],
+    showcaseAlbumDone: false, showcaseComplete: false,
+    currentAlbumIndex: 0, finishedAlbums: [],
   }),
   resetAll: () => set({
-    currentView: 'MAIN_MENU',
-    roomData: null,
-    gamePhase: null,
-    timeLeft: 0,
-    hasSubmitted: false,
-    myIsHost: false,
-    showcaseAlbumHeader: null,
-    showcaseEntries: [],
-    showcaseAlbumDone: false,
-    showcaseComplete: false,
-    currentAlbumIndex: 0,
-    finishedAlbums: [],
-    isReviewingPast: false,
-    errorMessage: null,
+    currentView: 'MAIN_MENU', roomData: null,
+    gamePhase: null, timeLeft: 0, hasSubmitted: false, myIsHost: false,
+    showcaseAlbumHeader: null, showcaseEntries: [],
+    showcaseAlbumDone: false, showcaseComplete: false,
+    currentAlbumIndex: 0, finishedAlbums: [], errorMessage: null,
   }),
 }));

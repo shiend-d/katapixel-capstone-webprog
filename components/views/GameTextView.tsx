@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Timer, Check } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/lib/gameStore';
@@ -10,13 +10,22 @@ export default function GameTextView() {
   const hasSubmitted = useGameStore((s) => s.hasSubmitted);
   const roomData = useGameStore((s) => s.roomData);
   const [text, setText] = useState('');
+  const textRef = useRef(''); // ref to avoid stale closure in auto-submit
 
-  // Auto-submit saat timer habis untuk fase menebak — kirim apa adanya
+  // Keep ref in sync with state
+  useEffect(() => { textRef.current = text; }, [text]);
+
+  // Auto-submit saat timer habis — gunakan store & ref langsung
   useEffect(() => {
     if (timeLeft === 0 && !hasSubmitted && gamePhase?.expectedInput === 'TEXT_FORM') {
       const timer = setTimeout(() => {
-        forceSubmit();
-      }, 100);
+        const rd = useGameStore.getState().roomData;
+        if (!rd) return;
+        if (useGameStore.getState().hasSubmitted) return;
+        const content = textRef.current.trim() || '[Tidak Ada Tebakan]';
+        getSocket().emit('submit_turn', { roomId: rd.roomId, type: 'TEXT', content });
+        useGameStore.getState().setHasSubmitted(true);
+      }, 200);
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -25,12 +34,6 @@ export default function GameTextView() {
   if (!gamePhase || !roomData) return <div className="flex min-h-screen items-center justify-center"><p className="text-[#4a1f2e]">Loading...</p></div>;
 
   const isFirstRound = gamePhase.roundNumber === 1;
-
-  function forceSubmit() {
-    const content = text.trim() || '[Tidak Ada Tebakan]';
-    getSocket().emit('submit_turn', { roomId: roomData!.roomId, type: 'TEXT', content });
-    useGameStore.getState().setHasSubmitted(true);
-  }
 
   function handleSubmit() {
     if (!text.trim()) return alert('Tulis sesuatu dulu!');

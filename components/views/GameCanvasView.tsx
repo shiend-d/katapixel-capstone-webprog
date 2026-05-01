@@ -64,12 +64,20 @@ export default function GameCanvasView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-submit saat timer habis (mencegah double submission dengan hasSubmitted)
+  // Auto-submit saat timer habis — gunakan store langsung untuk menghindari stale closure
   useEffect(() => {
     if (timeLeft === 0 && !hasSubmitted && gamePhase?.expectedInput === 'CANVAS') {
       const timer = setTimeout(() => {
-        handleSubmit();
-      }, 100);
+        const canvas = canvasRef.current;
+        const rd = useGameStore.getState().roomData;
+        if (!canvas || !rd) return;
+        if (useGameStore.getState().hasSubmitted) return; // double check
+        const exp = document.createElement('canvas');
+        exp.width = CANVAS_W; exp.height = CANVAS_H;
+        exp.getContext('2d')!.drawImage(canvas, 0, 0, CANVAS_W, CANVAS_H);
+        getSocket().emit('submit_turn', { roomId: rd.roomId, type: 'IMAGE', content: exp.toDataURL('image/png') });
+        useGameStore.getState().setHasSubmitted(true);
+      }, 200);
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
