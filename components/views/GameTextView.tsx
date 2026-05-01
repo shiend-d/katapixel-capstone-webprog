@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Timer, Check } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/lib/gameStore';
@@ -10,6 +10,17 @@ export default function GameTextView() {
   const hasSubmitted = useGameStore((s) => s.hasSubmitted);
   const roomData = useGameStore((s) => s.roomData);
   const [text, setText] = useState('');
+
+  // Auto-submit saat timer habis untuk fase menebak
+  useEffect(() => {
+    if (timeLeft === 0 && !hasSubmitted && text.trim() && gamePhase?.expectedInput === 'TEXT_FORM') {
+      const timer = setTimeout(() => {
+        handleSubmit();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, hasSubmitted, text, gamePhase]);
 
   if (!gamePhase || !roomData) return <div className="flex min-h-screen items-center justify-center"><p className="text-[#4a1f2e]">Loading...</p></div>;
 

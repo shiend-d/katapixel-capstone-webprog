@@ -25,6 +25,8 @@ interface GameState {
   showcaseEntries: Entry[];
   showcaseAlbumDone: boolean;
   showcaseComplete: boolean;
+  currentAlbumIndex: number;
+  allAlbums: Entry[][];
 
   // Public rooms
   publicRooms: PublicRoom[];
@@ -45,6 +47,8 @@ interface GameState {
   addShowcaseEntry: (e: Entry) => void;
   setShowcaseAlbumDone: (v: boolean) => void;
   setShowcaseComplete: (v: boolean) => void;
+  setCurrentAlbumIndex: (index: number) => void;
+  setAllAlbums: (albums: Entry[][]) => void;
   setPublicRooms: (rooms: PublicRoom[]) => void;
   setErrorMessage: (msg: string | null) => void;
   resetForNewAlbum: () => void;
@@ -66,6 +70,8 @@ export const useGameStore = create<GameState>((set) => ({
   showcaseEntries: [],
   showcaseAlbumDone: false,
   showcaseComplete: false,
+  currentAlbumIndex: 0,
+  allAlbums: [],
   publicRooms: [],
   errorMessage: null,
 
@@ -90,9 +96,11 @@ export const useGameStore = create<GameState>((set) => ({
   addShowcaseEntry: (e) => set((state) => ({ showcaseEntries: [...state.showcaseEntries, e] })),
   setShowcaseAlbumDone: (v) => set({ showcaseAlbumDone: v }),
   setShowcaseComplete: (v) => set({ showcaseComplete: v }),
+  setCurrentAlbumIndex: (index) => set({ currentAlbumIndex: index }),
+  setAllAlbums: (albums) => set({ allAlbums: albums }),
   setPublicRooms: (rooms) => set({ publicRooms: rooms }),
   setErrorMessage: (msg) => set({ errorMessage: msg }),
-  resetForNewAlbum: () => set({ showcaseEntries: [], showcaseAlbumDone: false }),
+  resetForNewAlbum: () => set({ showcaseEntries: [], showcaseAlbumDone: false, currentAlbumIndex: 0 }),
   resetForLobby: () => set({
     currentView: 'LOBBY',
     gamePhase: null,
@@ -102,6 +110,8 @@ export const useGameStore = create<GameState>((set) => ({
     showcaseEntries: [],
     showcaseAlbumDone: false,
     showcaseComplete: false,
+    currentAlbumIndex: 0,
+    allAlbums: [],
   }),
   resetAll: () => set({
     currentView: 'MAIN_MENU',
