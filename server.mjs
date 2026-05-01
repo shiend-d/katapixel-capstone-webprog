@@ -151,6 +151,16 @@ function resolveRound(io, room) {
 
   // Signal all non-submitted players to auto-submit their current work
   const unsubmitted = room.circularPath.filter((p) => !room.submittedThisRound.has(p.socketId));
+  if (unsubmitted.length === 0) {
+    // Everyone already submitted — advance immediately
+    room.currentRound++;
+    startNextPhase(io, room);
+    return;
+  }
+
+  // Mark that we are in the grace window so submit_turn won't also advance
+  room._resolveGraceActive = true;
+
   for (const player of unsubmitted) {
     const sock = io.sockets.sockets.get(player.socketId);
     if (sock) sock.emit('force_auto_submit');
@@ -158,6 +168,11 @@ function resolveRound(io, room) {
 
   // Give clients 800ms to auto-submit, then fill fallbacks for anyone still missing
   setTimeout(() => {
+    room._resolveGraceActive = false;
+
+    // If round already advanced (all submitted during grace), skip
+    if (room.currentRound !== roundNumber) return;
+
     room.circularPath.forEach((player, i) => {
       if (room.submittedThisRound.has(player.socketId)) return;
 
@@ -222,15 +237,9 @@ function buildAlbumData(room, albumKey, albumIndex) {
 function sendNextShowcaseAlbum(io, room) {
   const albumKey = room._showcaseAlbumKeys[room._showcaseIndex];
   if (!albumKey) {
-    // All albums done → reset to lobby
-    room.status = 'LOBBY';
-    room.currentRound = 1;
-    room.albums = {};
-    room.circularPath = [];
-    room.submittedThisRound = new Set();
+    // All albums done — stay in SHOWCASE so clients can browse albums
+    // Room will be reset when host explicitly returns to lobby via 'return_to_lobby'
     io.to(room.roomId).emit('showcase_complete');
-    io.to(room.roomId).emit('room_state_update', sanitizeRoom(room));
-    broadcastPublicRooms(io);
     return;
   }
 
@@ -357,8 +366,12 @@ app.prepare().then(() => {
       room.submittedThisRound.add(socket.id);
       if (room.submittedThisRound.size >= room.expectedSubmissions) {
         clearInterval(room._timerInterval);
-        room.currentRound++;
-        startNextPhase(io, room);
+        // Only advance if NOT inside the resolveRound grace window
+        // (resolveRound timeout will handle advancing)
+        if (!room._resolveGraceActive) {
+          room.currentRound++;
+          startNextPhase(io, room);
+        }
       }
     });
 
@@ -370,6 +383,21 @@ app.prepare().then(() => {
       clearTimeout(room._showcaseEntryTimer);
       room._showcaseIndex++;
       sendNextShowcaseAlbum(io, room);
+    });
+
+    // Host explicitly returns to lobby after showcase
+    socket.on('return_to_lobby', () => {
+      const room = rooms.get(socket.data.roomId);
+      if (!room || !socket.data.player?.isHost) return;
+      if (room.status !== 'SHOWCASE') return;
+      room.status = 'LOBBY';
+      room.currentRound = 1;
+      room.albums = {};
+      room.circularPath = [];
+      room.submittedThisRound = new Set();
+      room._finishedShowcaseAlbums = [];
+      io.to(room.roomId).emit('room_state_update', sanitizeRoom(room));
+      broadcastPublicRooms(io);
     });
 
 

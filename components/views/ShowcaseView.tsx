@@ -49,7 +49,14 @@ export default function ShowcaseView() {
     useGameStore.getState().viewAlbumByPlayer(playerName, playerAvatarId);
   }
 
-  function handleBackToLobby() { useGameStore.getState().resetForLobby(); }
+  function handleBackToLobby() {
+    const isHost = useGameStore.getState().myIsHost;
+    if (isHost) {
+      // Host sends return_to_lobby to server, which resets room for everyone
+      getSocket().emit('return_to_lobby');
+    }
+    useGameStore.getState().resetForLobby();
+  }
 
   const players = roomData?.players ?? [];
 
