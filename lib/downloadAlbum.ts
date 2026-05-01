@@ -1,135 +1,233 @@
-// lib/downloadAlbum.ts — Utility for downloading showcase album as PNG image
+// lib/downloadAlbum.ts — Render album entries to a Canvas and download as PNG
+import type { Entry } from './types';
 
-/**
- * Downloads a DOM element as PNG image using html2canvas.
- * Workaround: html2canvas v1 doesn't support CSS lab()/oklch() color functions
- * used by Tailwind CSS v4. We override computed styles in the cloned DOM to
- * convert unsupported color values to fallback hex colors before rendering.
- */
-export async function downloadElementAsImage(
-  element: HTMLElement | null,
-  fileName: string
-): Promise<void> {
-  if (!element) {
-    console.error('Element not found for download');
-    return;
+const BG_COLOR = '#fff5e1';
+const BORDER_COLOR = '#4a1f2e';
+const LABEL_COLOR = '#9a3556';
+const TEXT_BG = '#ffe066';
+const FALLBACK_BG = '#ffe0b8';
+const PADDING = 32;
+const ENTRY_GAP = 24;
+const IMG_MAX_W = 640;
+const IMG_MAX_H = 400;
+const FONT = '600 18px "Nunito", sans-serif';
+const FONT_SMALL = '700 13px "Nunito", sans-serif';
+const HEADER_FONT = '800 28px "Nunito", sans-serif';
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
   }
-
-  try {
-    // Dynamically import html2canvas to avoid issues if not installed
-    const html2canvas = (await import('html2canvas')).default;
-
-    // Regex to detect unsupported color functions
-    const unsupportedColorRegex = /\b(lab|oklch|oklab|lch|color)\s*\(/i;
-
-    // Create canvas from element with error handling for CSS color functions
-    const canvas = await html2canvas(element, {
-      backgroundColor: '#fff5e1',
-      scale: 2,
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      ignoreElements: (el: Element) => {
-        // Skip script, style tags
-        if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return true;
-        // Skip hidden elements
-        if (window.getComputedStyle(el).display === 'none') return true;
-        return false;
-      },
-      onclone: (clonedDocument: Document) => {
-        // Walk through all elements in the cloned DOM and replace any
-        // unsupported color function values with safe fallbacks
-        const allElements = clonedDocument.querySelectorAll('*');
-        allElements.forEach((el) => {
-          const htmlEl = el as HTMLElement;
-          const computedStyle = window.getComputedStyle(el);
-          
-          // Properties that commonly contain color values
-          const colorProps = [
-            'color', 'backgroundColor', 'borderColor',
-            'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
-            'outlineColor', 'textDecorationColor', 'boxShadow', 'caretColor',
-          ];
-
-          for (const prop of colorProps) {
-            const value = computedStyle.getPropertyValue(
-              prop.replace(/([A-Z])/g, '-$1').toLowerCase()
-            );
-            if (value && unsupportedColorRegex.test(value)) {
-              // Replace with a safe fallback
-              if (prop === 'backgroundColor') {
-                htmlEl.style.backgroundColor = 'transparent';
-              } else if (prop === 'color') {
-                htmlEl.style.color = '#1a1a1a';
-              } else if (prop.includes('border') || prop.includes('Border')) {
-                htmlEl.style.setProperty(
-                  prop.replace(/([A-Z])/g, '-$1').toLowerCase(),
-                  '#4a1f2e'
-                );
-              } else if (prop === 'boxShadow') {
-                htmlEl.style.boxShadow = 'none';
-              } else {
-                htmlEl.style.setProperty(
-                  prop.replace(/([A-Z])/g, '-$1').toLowerCase(),
-                  'transparent'
-                );
-              }
-            }
-          }
-
-          // Also clean up CSS custom properties that use unsupported functions
-          // by overriding the inline style
-          const inlineStyle = htmlEl.getAttribute('style') || '';
-          if (unsupportedColorRegex.test(inlineStyle)) {
-            htmlEl.setAttribute(
-              'style',
-              inlineStyle.replace(
-                /(?:lab|oklch|oklab|lch|color)\s*\([^)]*\)/gi,
-                'transparent'
-              )
-            );
-          }
-        });
-
-        // Add a blanket style override for any remaining issues
-        const overrideStyle = clonedDocument.createElement('style');
-        overrideStyle.textContent = `
-          * {
-            --tw-ring-color: transparent !important;
-            --tw-ring-offset-color: transparent !important;
-          }
-        `;
-        clonedDocument.head.appendChild(overrideStyle);
-      },
-    });
-
-    // Convert canvas to blob and download
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        console.error('Failed to create blob from canvas');
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      console.log('Album downloaded:', fileName);
-    }, 'image/png');
-  } catch (error) {
-    console.error('Error downloading album:', error);
-    alert('Gagal mengunduh album. Silakan coba beberapa saat lagi.');
-  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 /**
- * Generates a filename with timestamp
+ * Render the showcase album entries directly to a canvas and download as PNG.
+ * This avoids html2canvas CSS compatibility issues entirely.
  */
+export async function downloadAlbumAsPng(
+  ownerName: string,
+  ownerAvatar: string,
+  entries: Entry[],
+): Promise<void> {
+  // --- Measure pass: calculate total height ---
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = IMG_MAX_W + PADDING * 2;
+  const tempCtx = tempCanvas.getContext('2d')!;
+  tempCtx.font = FONT;
+
+  let totalHeight = PADDING; // top padding
+  totalHeight += 48; // header
+  totalHeight += 16; // gap after header
+
+  interface RenderedEntry {
+    type: string;
+    label: string;
+    authorName: string;
+    // For text
+    lines?: string[];
+    textH?: number;
+    // For image
+    img?: HTMLImageElement;
+    drawW?: number;
+    drawH?: number;
+    isFallback?: boolean;
+  }
+
+  const rendered: RenderedEntry[] = [];
+
+  for (const entry of entries) {
+    const authorName = entry.authorName || '?';
+    const typeLabel = (entry.type === 'TEXT' || entry.type === 'FALLBACK_TEXT') ? 'TEKS' : (entry.type === 'EMPTY_CANVAS' ? 'KOSONG' : 'GAMBAR');
+    const labelH = 20; // label row height
+
+    if (entry.type === 'TEXT' || entry.type === 'FALLBACK_TEXT') {
+      tempCtx.font = FONT;
+      const lines = wrapText(tempCtx, entry.content || '[Tidak Ada Tebakan]', IMG_MAX_W - 32);
+      const textH = lines.length * 26 + 20; // line height + padding
+      totalHeight += labelH + 8 + textH + ENTRY_GAP;
+      rendered.push({ type: entry.type, label: typeLabel, authorName, lines, textH, isFallback: entry.type === 'FALLBACK_TEXT' });
+    } else if (entry.type === 'IMAGE' && entry.content) {
+      try {
+        const img = await loadImage(entry.content);
+        const aspect = img.width / img.height;
+        let drawW = Math.min(img.width, IMG_MAX_W);
+        let drawH = drawW / aspect;
+        if (drawH > IMG_MAX_H) { drawH = IMG_MAX_H; drawW = drawH * aspect; }
+        totalHeight += labelH + 8 + drawH + 16 + ENTRY_GAP;
+        rendered.push({ type: entry.type, label: typeLabel, authorName, img, drawW, drawH });
+      } catch {
+        totalHeight += labelH + 8 + 60 + ENTRY_GAP;
+        rendered.push({ type: 'EMPTY_CANVAS', label: 'KOSONG', authorName, textH: 60 });
+      }
+    } else {
+      // EMPTY_CANVAS
+      totalHeight += labelH + 8 + 60 + ENTRY_GAP;
+      rendered.push({ type: entry.type, label: typeLabel, authorName, textH: 60 });
+    }
+  }
+
+  totalHeight += PADDING; // bottom padding
+
+  // --- Draw pass ---
+  const canvas = document.createElement('canvas');
+  const width = IMG_MAX_W + PADDING * 2;
+  canvas.width = width;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, width, totalHeight);
+
+  // Border
+  ctx.strokeStyle = BORDER_COLOR;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, width - 6, totalHeight - 6);
+
+  let y = PADDING;
+
+  // Header
+  ctx.font = HEADER_FONT;
+  ctx.fillStyle = BORDER_COLOR;
+  ctx.textAlign = 'center';
+  ctx.fillText(`${ownerAvatar} Album Milik ${ownerName}`, width / 2, y + 32);
+  y += 48 + 16;
+
+  // Entries
+  for (const r of rendered) {
+    // Author label
+    ctx.font = FONT_SMALL;
+    ctx.fillStyle = LABEL_COLOR;
+    ctx.textAlign = 'left';
+    ctx.fillText(`${r.authorName}  •  ${r.label}`, PADDING, y + 14);
+    y += 20 + 8;
+
+    if ((r.type === 'TEXT' || r.type === 'FALLBACK_TEXT') && r.lines) {
+      // Text bubble
+      const bubbleW = IMG_MAX_W;
+      const bubbleH = r.textH!;
+      const bx = PADDING;
+      ctx.fillStyle = r.isFallback ? FALLBACK_BG : TEXT_BG;
+      roundRect(ctx, bx, y, bubbleW, bubbleH, 14);
+      ctx.fill();
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = 3;
+      roundRect(ctx, bx, y, bubbleW, bubbleH, 14);
+      ctx.stroke();
+      // Text lines
+      ctx.font = FONT;
+      ctx.fillStyle = r.isFallback ? LABEL_COLOR : BORDER_COLOR;
+      ctx.textAlign = 'left';
+      let ly = y + 26;
+      for (const line of r.lines) {
+        ctx.fillText(line, bx + 16, ly);
+        ly += 26;
+      }
+      y += bubbleH + ENTRY_GAP;
+    } else if (r.type === 'IMAGE' && r.img) {
+      // Draw image centered
+      const ix = PADDING + (IMG_MAX_W - r.drawW!) / 2;
+      // Image border
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = 4;
+      roundRect(ctx, ix - 4, y - 4, r.drawW! + 8, r.drawH! + 8, 12);
+      ctx.stroke();
+      // Image
+      ctx.drawImage(r.img, ix, y, r.drawW!, r.drawH!);
+      y += r.drawH! + 16 + ENTRY_GAP;
+    } else {
+      // Empty canvas placeholder
+      ctx.fillStyle = '#fff8e1';
+      roundRect(ctx, PADDING, y, IMG_MAX_W, 50, 12);
+      ctx.fill();
+      ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = BORDER_COLOR + '80';
+      ctx.lineWidth = 3;
+      roundRect(ctx, PADDING, y, IMG_MAX_W, 50, 12);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = FONT;
+      ctx.fillStyle = BORDER_COLOR + '80';
+      ctx.textAlign = 'center';
+      ctx.fillText('[Tidak ada gambar]', width / 2, y + 32);
+      y += 60 + ENTRY_GAP;
+    }
+  }
+
+  // Watermark
+  ctx.font = '600 12px "Nunito", sans-serif';
+  ctx.fillStyle = LABEL_COLOR + '80';
+  ctx.textAlign = 'right';
+  ctx.fillText('Katapixel — The Pesan Berantai Game', width - PADDING, totalHeight - 14);
+
+  // Download
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = generateAlbumFileName(ownerName);
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 export function generateAlbumFileName(ownerName: string): string {
-  const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const timestamp = new Date().toISOString().slice(0, 10);
   return `Katapixel_Album_${ownerName}_${timestamp}.png`;
 }

@@ -149,41 +149,74 @@ function resolveRound(io, room) {
   const totalPlayers = room.circularPath.length;
   const roundNumber = room.currentRound;
 
-  room.circularPath.forEach((player, i) => {
-    if (room.submittedThisRound.has(player.socketId)) return;
+  // Signal all non-submitted players to auto-submit their current work
+  const unsubmitted = room.circularPath.filter((p) => !room.submittedThisRound.has(p.socketId));
+  for (const player of unsubmitted) {
+    const sock = io.sockets.sockets.get(player.socketId);
+    if (sock) sock.emit('force_auto_submit');
+  }
 
-    const albumOwnerIdx = getAlbumOwnerIndex(i, roundNumber, totalPlayers);
-    const albumOwner = room.circularPath[albumOwnerIdx];
-    const album = room.albums[albumOwner.socketId] || [];
-    const lastEntry = album[album.length - 1];
+  // Give clients 800ms to auto-submit, then fill fallbacks for anyone still missing
+  setTimeout(() => {
+    room.circularPath.forEach((player, i) => {
+      if (room.submittedThisRound.has(player.socketId)) return;
 
-    const wasDrawRound = roundNumber !== 1 &&
-      (!lastEntry || lastEntry.type === 'TEXT' || lastEntry.type === 'FALLBACK_TEXT');
+      const albumOwnerIdx = getAlbumOwnerIndex(i, roundNumber, totalPlayers);
+      const albumOwner = room.circularPath[albumOwnerIdx];
+      const album = room.albums[albumOwner.socketId] || [];
+      const lastEntry = album[album.length - 1];
 
-    if (roundNumber === 1 || !wasDrawRound) {
-      room.albums[albumOwner.socketId].push({
-        authorId: player.socketId,
-        type: 'FALLBACK_TEXT',
-        content: '[Tidak Ada Tebakan]',
-      });
-    } else {
-      room.albums[albumOwner.socketId].push({
-        authorId: player.socketId,
-        type: 'EMPTY_CANVAS',
-        content: '',
-      });
-    }
-  });
+      const wasDrawRound = roundNumber !== 1 &&
+        (!lastEntry || lastEntry.type === 'TEXT' || lastEntry.type === 'FALLBACK_TEXT');
 
-  room.currentRound++;
-  startNextPhase(io, room);
+      if (roundNumber === 1 || !wasDrawRound) {
+        room.albums[albumOwner.socketId].push({
+          authorId: player.socketId,
+          type: 'FALLBACK_TEXT',
+          content: '[Tidak Ada Tebakan]',
+        });
+      } else {
+        room.albums[albumOwner.socketId].push({
+          authorId: player.socketId,
+          type: 'EMPTY_CANVAS',
+          content: '',
+        });
+      }
+    });
+
+    room.currentRound++;
+    startNextPhase(io, room);
+  }, 800);
 }
 
 function runShowcase(io, room) {
   const albumKeys = room.circularPath.map((p) => p.socketId);
   room._showcaseIndex = 0;
   room._showcaseAlbumKeys = albumKeys;
+  // Build finishedShowcaseAlbums for re-navigation
+  room._finishedShowcaseAlbums = [];
   sendNextShowcaseAlbum(io, room);
+}
+
+function buildAlbumData(room, albumKey, albumIndex) {
+  const ownerPlayer = room.circularPath.find((p) => p.socketId === albumKey);
+  const entries = (room.albums[albumKey] || []).map((entry) => {
+    const authorPlayer = room.circularPath.find((p) => p.socketId === entry.authorId);
+    return {
+      ...entry,
+      authorName: authorPlayer?.username || '?',
+      authorAvatarId: authorPlayer?.avatarId || 0,
+    };
+  });
+  return {
+    header: {
+      ownerName: ownerPlayer?.username || '?',
+      ownerAvatarId: ownerPlayer?.avatarId || 0,
+      albumIndex,
+      totalAlbums: room._showcaseAlbumKeys.length,
+    },
+    entries,
+  };
 }
 
 function sendNextShowcaseAlbum(io, room) {
@@ -201,32 +234,22 @@ function sendNextShowcaseAlbum(io, room) {
     return;
   }
 
-  const ownerPlayer = room.circularPath.find((p) => p.socketId === albumKey);
-  const entries = room.albums[albumKey] || [];
+  const albumData = buildAlbumData(room, albumKey, room._showcaseIndex);
 
-  io.to(room.roomId).emit('showcase_album_header', {
-    ownerName: ownerPlayer?.username || '?',
-    ownerAvatarId: ownerPlayer?.avatarId || 0,
-    albumIndex: room._showcaseIndex,
-    totalAlbums: room._showcaseAlbumKeys.length,
-  });
+  io.to(room.roomId).emit('showcase_album_header', albumData.header);
 
   let entryIndex = 0;
   room._showcaseEntryTimer = null;
 
   function sendNextEntry() {
-    if (entryIndex >= entries.length) {
+    if (entryIndex >= albumData.entries.length) {
+      // Store completed album for re-navigation
+      room._finishedShowcaseAlbums[room._showcaseIndex] = albumData;
       room._waitingForNextAlbum = true;
       io.to(room.roomId).emit('showcase_album_done');
       return;
     }
-    const entry = entries[entryIndex];
-    const authorPlayer = room.circularPath.find((p) => p.socketId === entry.authorId);
-    io.to(room.roomId).emit('showcase_step', {
-      ...entry,
-      authorName: authorPlayer?.username || '?',
-      authorAvatarId: authorPlayer?.avatarId || 0,
-    });
+    io.to(room.roomId).emit('showcase_step', albumData.entries[entryIndex]);
     entryIndex++;
     room._showcaseEntryTimer = setTimeout(sendNextEntry, 5000);
   }
@@ -347,6 +370,15 @@ app.prepare().then(() => {
       clearTimeout(room._showcaseEntryTimer);
       room._showcaseIndex++;
       sendNextShowcaseAlbum(io, room);
+    });
+
+    // Allow clients to request a previously finished album for re-viewing
+    socket.on('request_album', ({ albumIndex }) => {
+      const room = rooms.get(socket.data.roomId);
+      if (!room || room.status !== 'SHOWCASE') return;
+      const album = room._finishedShowcaseAlbums?.[albumIndex];
+      if (!album) return;
+      socket.emit('replay_album', album);
     });
 
     socket.on('disconnect', () => {

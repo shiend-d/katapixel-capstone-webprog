@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { ArrowRight, ArrowLeft, Download, Home, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/lib/gameStore';
-import { downloadElementAsImage, generateAlbumFileName } from '@/lib/downloadAlbum';
+import { downloadAlbumAsPng } from '@/lib/downloadAlbum';
 import { AVATARS } from '@/lib/types';
 
 export default function ShowcaseView() {
@@ -15,7 +15,6 @@ export default function ShowcaseView() {
   const roomData = useGameStore((s) => s.roomData);
   const currentAlbumIndex = useGameStore((s) => s.currentAlbumIndex);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const albumContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -25,33 +24,26 @@ export default function ShowcaseView() {
   }, [showcaseEntries.length]);
 
   function handleNextAlbum() {
-    // Use the totalAlbums from the server-sent header (allAlbums is never populated client-side)
-    const totalAlbums = showcaseAlbumHeader?.totalAlbums ?? 1;
-    
-    if (currentAlbumIndex < totalAlbums - 1) {
-      console.log('Navigate to next album from index:', currentAlbumIndex);
-      // Server handles incrementing the index; emit 'next_album' to match server listener
-      getSocket().emit('next_album');
-    } else {
-      console.log('Last album - emitting next_album to trigger showcase_complete on server');
-      // Server will emit 'showcase_complete' when there are no more albums
-      getSocket().emit('next_album');
-    }
+    getSocket().emit('next_album');
   }
 
   function handlePreviousAlbum() {
-    // Previous album navigation is not supported by the server (it only has next_album).
-    // This button is kept for display but disabled.
+    if (currentAlbumIndex <= 0) return;
+    const prevIdx = currentAlbumIndex - 1;
+    getSocket().emit('request_album', { albumIndex: prevIdx });
   }
 
   function handleDownloadAlbum() {
-    if (!showcaseAlbumHeader || !albumContentRef.current) return;
-    const fileName = generateAlbumFileName(showcaseAlbumHeader.ownerName);
-    downloadElementAsImage(albumContentRef.current, fileName);
+    if (!showcaseAlbumHeader || showcaseEntries.length === 0) return;
+    downloadAlbumAsPng(
+      showcaseAlbumHeader.ownerName,
+      AVATARS[showcaseAlbumHeader.ownerAvatarId],
+      showcaseEntries,
+    );
   }
+
   function handleBackToLobby() { useGameStore.getState().resetForLobby(); }
 
-  // Build player list for sidebar
   const players = roomData?.players ?? [];
 
   return (
@@ -105,7 +97,7 @@ export default function ShowcaseView() {
           </div>
 
           {/* Album content */}
-          <div className="gartic-panel bg-[#fff5e1] p-5" ref={albumContentRef}>
+          <div className="gartic-panel bg-[#fff5e1] p-5">
             {/* Album owner header */}
             {showcaseAlbumHeader && (
               <div className="mb-4 flex items-center justify-between">
@@ -113,35 +105,33 @@ export default function ShowcaseView() {
                   {AVATARS[showcaseAlbumHeader.ownerAvatarId]} Album Milik {showcaseAlbumHeader.ownerName}
                 </h2>
                 <div className="flex gap-2">
-                  <button onClick={handleDownloadAlbum}
-                    className="gartic-btn flex items-center gap-1.5 bg-[#9a5dff] px-4 py-2 text-sm text-white hover:bg-[#8047d8]"
-                    style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
-                    <Download className="h-4 w-4" /> UNDUH
-                  </button>
+                  {/* Download button */}
+                  {showcaseAlbumDone && (
+                    <button onClick={handleDownloadAlbum}
+                      className="gartic-btn flex items-center gap-1.5 bg-[#9a5dff] px-4 py-2 text-sm text-white hover:bg-[#8047d8]"
+                      style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
+                      <Download className="h-4 w-4" /> UNDUH
+                    </button>
+                  )}
+                  {/* Previous album (anyone can re-view) */}
+                  {showcaseAlbumDone && currentAlbumIndex > 0 && (
+                    <button onClick={handlePreviousAlbum}
+                      className="gartic-btn flex items-center gap-1.5 bg-[#ffa500] px-4 py-2 text-sm text-white hover:bg-[#ff8c00]"
+                      style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
+                      <ArrowLeft className="h-4 w-4" /> SEBELUMNYA
+                    </button>
+                  )}
+                  {/* Next album (host only, during live flow) */}
                   {myIsHost && showcaseAlbumDone && !showcaseComplete && (
-                    <>
-                      <button 
-                        onClick={handlePreviousAlbum}
-                        disabled={currentAlbumIndex === 0}
-                        className={`gartic-btn flex items-center gap-1.5 px-4 py-2 text-sm ${
-                          currentAlbumIndex === 0 
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                            : 'bg-[#ffa500] text-white hover:bg-[#ff8c00]'
-                        }`}
-                        style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
-                        <ArrowLeft className="h-4 w-4" /> SEBELUMNYA
-                      </button>
-                      <button 
-                        onClick={handleNextAlbum}
-                        className="gartic-btn flex items-center gap-1.5 bg-gradient-to-b from-[#7bd389] to-[#3fb56b] px-4 py-2 text-sm text-white"
-                        style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
-                        {showcaseAlbumHeader && currentAlbumIndex === showcaseAlbumHeader.totalAlbums - 1 ? (
-                          <>SELESAI & KEMBALI</>
-                        ) : (
-                          <>BERIKUTNYA <ArrowRight className="h-4 w-4" /></>
-                        )}
-                      </button>
-                    </>
+                    <button onClick={handleNextAlbum}
+                      className="gartic-btn flex items-center gap-1.5 bg-gradient-to-b from-[#7bd389] to-[#3fb56b] px-4 py-2 text-sm text-white"
+                      style={{ fontWeight: 800, textShadow: '1px 1px 0 #4a1f2e' }}>
+                      {showcaseAlbumHeader && currentAlbumIndex === showcaseAlbumHeader.totalAlbums - 1 ? (
+                        <>SELESAI & KEMBALI</>
+                      ) : (
+                        <>BERIKUTNYA <ArrowRight className="h-4 w-4" /></>
+                      )}
+                    </button>
                   )}
                 </div>
               </div>

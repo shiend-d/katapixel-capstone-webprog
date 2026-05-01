@@ -81,6 +81,22 @@ export default function Home() {
       set({ showcaseComplete: true });
     });
 
+    // Server signals timeout — auto-submit current work
+    socket.on('force_auto_submit', () => {
+      set({ timeLeft: 0 });
+      // The individual view components watch timeLeft===0 and auto-submit
+    });
+
+    // Replay a previously-seen album
+    socket.on('replay_album', (albumData) => {
+      set({
+        showcaseAlbumHeader: albumData.header,
+        showcaseEntries: albumData.entries,
+        showcaseAlbumDone: true,
+        currentAlbumIndex: albumData.header.albumIndex,
+      });
+    });
+
     socket.on('error_alert', ({ message }) => {
       set({ errorMessage: message });
       if (message.includes('dikeluarkan') || message.includes('dibubarkan') || message.includes('Host')) {
@@ -103,6 +119,8 @@ export default function Home() {
       socket.off('showcase_step');
       socket.off('showcase_album_done');
       socket.off('showcase_complete');
+      socket.off('force_auto_submit');
+      socket.off('replay_album');
       socket.off('error_alert');
     };
   }, []);

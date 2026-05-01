@@ -11,20 +11,26 @@ export default function GameTextView() {
   const roomData = useGameStore((s) => s.roomData);
   const [text, setText] = useState('');
 
-  // Auto-submit saat timer habis untuk fase menebak
+  // Auto-submit saat timer habis untuk fase menebak — kirim apa adanya
   useEffect(() => {
-    if (timeLeft === 0 && !hasSubmitted && text.trim() && gamePhase?.expectedInput === 'TEXT_FORM') {
+    if (timeLeft === 0 && !hasSubmitted && gamePhase?.expectedInput === 'TEXT_FORM') {
       const timer = setTimeout(() => {
-        handleSubmit();
+        forceSubmit();
       }, 100);
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, hasSubmitted, text, gamePhase]);
+  }, [timeLeft, hasSubmitted, gamePhase]);
 
   if (!gamePhase || !roomData) return <div className="flex min-h-screen items-center justify-center"><p className="text-[#4a1f2e]">Loading...</p></div>;
 
   const isFirstRound = gamePhase.roundNumber === 1;
+
+  function forceSubmit() {
+    const content = text.trim() || '[Tidak Ada Tebakan]';
+    getSocket().emit('submit_turn', { roomId: roomData!.roomId, type: 'TEXT', content });
+    useGameStore.getState().setHasSubmitted(true);
+  }
 
   function handleSubmit() {
     if (!text.trim()) return alert('Tulis sesuatu dulu!');
