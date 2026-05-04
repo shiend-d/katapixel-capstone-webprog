@@ -20,7 +20,6 @@ export default function LobbyView() {
   }
 
   function handleKick(targetSocketId: string) {
-    if (!confirm('Yakin ingin mengeluarkan pemain ini?')) return;
     getSocket().emit('kick_player', { targetSocketId });
   }
 
@@ -118,7 +117,7 @@ export default function LobbyView() {
                 {myIsHost ? (
                   <select value={roomData.maxPlayers} onChange={(e) => handleUpdateSetting('maxPlayers', Number(e.target.value))}
                     className="gartic-btn w-full bg-white px-3 py-2 text-[#4a1f2e]">
-                    {[4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n} Pemain</option>)}
+                    {[4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n} Pemain</option>)}
                   </select>
                 ) : (
                   <div className="gartic-btn bg-white/50 px-3 py-2 text-[#4a1f2e]">{roomData.maxPlayers} Pemain</div>
@@ -174,11 +173,11 @@ export default function LobbyView() {
               </div>
               {/* Theme */}
               <div className="md:col-span-2">
-                <label className="mb-1.5 block text-sm text-[#9a3556]">Tema (opsional)</label>
+                <label className="mb-1.5 block text-sm text-[#9a3556]">Tema</label>
                 {myIsHost ? (
                   <input value={roomData.theme} onChange={(e) => handleUpdateSetting('theme', e.target.value)}
                     className="gartic-btn w-full bg-white px-3 py-2 text-[#4a1f2e] outline-none"
-                    placeholder="Contoh: Kehidupan Anak Kos" />
+                    placeholder="Contoh: Makanan" />
                 ) : (
                   <div className="gartic-btn bg-white/50 px-3 py-2 text-[#4a1f2e]">{roomData.theme || '(tidak ada)'}</div>
                 )}

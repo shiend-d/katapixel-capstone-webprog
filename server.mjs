@@ -260,7 +260,7 @@ function sendNextShowcaseAlbum(io, room) {
     }
     io.to(room.roomId).emit('showcase_step', albumData.entries[entryIndex]);
     entryIndex++;
-    room._showcaseEntryTimer = setTimeout(sendNextEntry, 5000);
+    room._showcaseEntryTimer = setTimeout(sendNextEntry, 3750);
   }
   sendNextEntry();
 }

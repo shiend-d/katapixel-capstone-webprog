@@ -70,7 +70,7 @@ export default function GameTextView() {
             </span>
           </div>
           <div className={`gartic-btn flex items-center gap-2 px-4 py-2 ${timeLeft <= 10 ? 'bg-[#ff5e5e] text-white' : 'bg-[#ffe066] text-[#4a1f2e]'}`}
-               style={{ fontWeight: 800 }}>
+            style={{ fontWeight: 800 }}>
             <Timer className="h-4 w-4" />
             <span style={{ fontSize: '1.25rem' }}>{timeLeft}s</span>
           </div>
@@ -79,7 +79,7 @@ export default function GameTextView() {
         {/* Prompt banner */}
         <div className="gartic-panel mb-4 bg-gradient-to-b from-[#d63384] to-[#9a2553] p-3 text-center">
           <div className="text-white uppercase" style={{ fontWeight: 800, letterSpacing: '0.1em', textShadow: '1px 1px 0 #4a1f2e' }}>
-            {isFirstRound ? '📝 Tulis kalimat aneh atau lucu!' : '🔍 Apa yang kamu lihat di gambar ini?'}
+            {isFirstRound ? 'Tulis kalimat yang berhubungan dengan tema!' : 'Apa yang kamu lihat di gambar ini?'}
           </div>
         </div>
 
@@ -113,7 +113,7 @@ export default function GameTextView() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             className="gartic-btn mb-3 w-full bg-white px-4 py-3 text-[#4a1f2e] outline-none"
-            placeholder={isFirstRound ? 'Contoh: "Kucing oren meretas server NASA"' : 'Ketik tebakanmu di sini...'}
+            placeholder={isFirstRound ? 'Tulis kalimat disini...' : 'Ketik tebakanmu di sini...'}
             maxLength={200}
           />
           <button onClick={handleSubmit}

@@ -54,8 +54,8 @@ export default function MainMenuView() {
                 KATA<span className="text-[#9a3556]">PIXEL</span>
               </h1>
             </div>
-            <span className="rounded-full bg-[#4a1f2e] px-4 py-1 text-xs uppercase tracking-widest text-[#9a3556]">
-              The Pesan Berantai Game
+            <span className="rounded-full bg-[#4a1f2e] px-4 py-1 text-xs uppercase tracking-widest text-white">
+              Game Tebak Gambar Berantai
             </span>
           </div>
         </div>
@@ -81,11 +81,10 @@ export default function MainMenuView() {
                 <button
                   key={i}
                   onClick={() => setSelectedAvatar(i)}
-                  className={`aspect-square rounded-xl border-[3px] text-2xl transition hover:scale-110 ${
-                    selectedAvatar === i
+                  className={`aspect-square rounded-xl border-[3px] text-2xl transition hover:scale-110 ${selectedAvatar === i
                       ? 'border-[#ffe066] bg-[#ff8a5b] shadow-[0_3px_0_0_#4a1f2e]'
                       : 'border-[#4a1f2e] bg-[#ffe0b8]'
-                  }`}
+                    }`}
                 >
                   {a}
                 </button>

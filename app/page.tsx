@@ -7,6 +7,7 @@ import LobbyView from '@/components/views/LobbyView';
 import GameTextView from '@/components/views/GameTextView';
 import GameCanvasView from '@/components/views/GameCanvasView';
 import ShowcaseView from '@/components/views/ShowcaseView';
+import MusicPlayer from '@/components/MusicPlayer';
 import { X } from 'lucide-react';
 
 export default function Home() {
@@ -110,6 +111,7 @@ export default function Home() {
         </div>
       )}
       {view}
+      <MusicPlayer />
     </div>
   );
 }

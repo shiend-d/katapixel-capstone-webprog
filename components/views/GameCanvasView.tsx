@@ -142,14 +142,14 @@ export default function GameCanvasView() {
     const sx = Math.round(startX * dpr), sy = Math.round(startY * dpr);
     if (sx < 0 || sx >= w || sy < 0 || sy >= h) return;
     const startIdx = (sy * w + sx) * 4;
-    const tR = data[startIdx], tG = data[startIdx+1], tB = data[startIdx+2], tA = data[startIdx+3];
-    const tc = document.createElement('canvas'); tc.width=1; tc.height=1;
-    const tcx = tc.getContext('2d')!; tcx.fillStyle=fillColor; tcx.fillRect(0,0,1,1);
-    const fd = tcx.getImageData(0,0,1,1).data;
-    const fR=fd[0], fG=fd[1], fB=fd[2], fA=fd[3];
-    if (tR===fR && tG===fG && tB===fB && tA===fA) return;
+    const tR = data[startIdx], tG = data[startIdx + 1], tB = data[startIdx + 2], tA = data[startIdx + 3];
+    const tc = document.createElement('canvas'); tc.width = 1; tc.height = 1;
+    const tcx = tc.getContext('2d')!; tcx.fillStyle = fillColor; tcx.fillRect(0, 0, 1, 1);
+    const fd = tcx.getImageData(0, 0, 1, 1).data;
+    const fR = fd[0], fG = fd[1], fB = fd[2], fA = fd[3];
+    if (tR === fR && tG === fG && tB === fB && tA === fA) return;
     const tol = 30;
-    const matches = (idx: number) => Math.abs(data[idx]-tR)<=tol && Math.abs(data[idx+1]-tG)<=tol && Math.abs(data[idx+2]-tB)<=tol && Math.abs(data[idx+3]-tA)<=tol;
+    const matches = (idx: number) => Math.abs(data[idx] - tR) <= tol && Math.abs(data[idx + 1] - tG) <= tol && Math.abs(data[idx + 2] - tB) <= tol && Math.abs(data[idx + 3] - tA) <= tol;
     const queue = [sx, sy]; const visited = new Uint8Array(w * h);
     while (queue.length > 0) {
       const cy = queue.pop()!, cx = queue.pop()!;
@@ -157,9 +157,9 @@ export default function GameCanvasView() {
       if (visited[key]) continue; visited[key] = 1;
       const idx = key * 4;
       if (!matches(idx)) continue;
-      data[idx]=fR; data[idx+1]=fG; data[idx+2]=fB; data[idx+3]=fA;
-      if (cx>0) queue.push(cx-1,cy); if (cx<w-1) queue.push(cx+1,cy);
-      if (cy>0) queue.push(cx,cy-1); if (cy<h-1) queue.push(cx,cy+1);
+      data[idx] = fR; data[idx + 1] = fG; data[idx + 2] = fB; data[idx + 3] = fA;
+      if (cx > 0) queue.push(cx - 1, cy); if (cx < w - 1) queue.push(cx + 1, cy);
+      if (cy > 0) queue.push(cx, cy - 1); if (cy < h - 1) queue.push(cx, cy + 1);
     }
     ctx.putImageData(imageData, 0, 0);
     saveToUndoStack();
@@ -193,7 +193,7 @@ export default function GameCanvasView() {
       if (tool === 'rect') { ctx.strokeRect(sx, sy, w, h); }
       else if (tool === 'circle') {
         ctx.beginPath();
-        ctx.ellipse(sx + w/2, sy + h/2, Math.abs(w)/2, Math.abs(h)/2, 0, 0, Math.PI*2);
+        ctx.ellipse(sx + w / 2, sy + h / 2, Math.abs(w) / 2, Math.abs(h) / 2, 0, 0, Math.PI * 2);
         ctx.stroke();
       } else if (tool === 'triangle') {
         drawTriangle(ctx, sx, sy, pos.x, pos.y, color, brushSize);
@@ -247,7 +247,7 @@ export default function GameCanvasView() {
             </span>
           </div>
           <div className={`gartic-btn flex items-center gap-2 px-4 py-2 ${timeLeft <= 10 ? 'bg-[#ff5e5e] text-white' : 'bg-[#ffe066] text-[#4a1f2e]'}`}
-               style={{ fontWeight: 800 }}>
+            style={{ fontWeight: 800 }}>
             <Timer className="h-4 w-4" />
             <span style={{ fontSize: '1.25rem' }}>{timeLeft}s</span>
           </div>
@@ -257,7 +257,7 @@ export default function GameCanvasView() {
         {gamePhase.referenceData && (
           <div className="gartic-panel mb-3 bg-gradient-to-b from-[#d63384] to-[#9a2553] p-3 text-center">
             <div className="text-white uppercase" style={{ fontWeight: 800, letterSpacing: '0.1em', textShadow: '1px 1px 0 #4a1f2e' }}>
-              ✏️ Gambarkan: &quot;{gamePhase.referenceData.content}&quot;
+              Gambarkan: &quot;{gamePhase.referenceData.content}&quot;
             </div>
           </div>
         )}
@@ -311,9 +311,8 @@ export default function GameCanvasView() {
                   const Icon = t.icon;
                   return (
                     <button key={t.id} onClick={() => setTool(t.id)}
-                      className={`flex aspect-square items-center justify-center rounded-lg border-[3px] border-[#4a1f2e] transition ${
-                        tool === t.id ? 'bg-[#ffe066] text-[#4a1f2e]' : 'bg-white text-[#4a1f2e] hover:bg-[#ffe0b8]'
-                      }`}>
+                      className={`flex aspect-square items-center justify-center rounded-lg border-[3px] border-[#4a1f2e] transition ${tool === t.id ? 'bg-[#ffe066] text-[#4a1f2e]' : 'bg-white text-[#4a1f2e] hover:bg-[#ffe0b8]'
+                        }`}>
                       <Icon className="h-4 w-4" />
                     </button>
                   );

@@ -16,13 +16,35 @@ export default function ShowcaseView() {
   const finishedAlbums = useGameStore((s) => s.finishedAlbums);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [revealedCount, setRevealedCount] = useState(0);
 
+  // Reset revealed count when a new live album starts
   useEffect(() => {
-    if (scrollRef.current) {
-      const last = scrollRef.current.lastElementChild;
-      if (last) last.scrollIntoView({ behavior: 'smooth' });
+    if (!showcaseComplete) {
+      setRevealedCount(0);
     }
-  }, [showcaseEntries.length]);
+  }, [showcaseAlbumHeader?.albumIndex, showcaseComplete]);
+
+  // Typing animation delay
+  useEffect(() => {
+    if (showcaseComplete) return;
+    if (showcaseEntries.length > revealedCount) {
+      const timer = setTimeout(() => {
+        setRevealedCount(prev => prev + 1);
+        setTimeout(() => {
+          if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }, 50);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [showcaseEntries.length, revealedCount, showcaseComplete]);
+
+  // Auto scroll initially
+  useEffect(() => {
+    if (showcaseComplete && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [showcaseEntries.length, showcaseComplete]);
 
   function handleNextAlbum() {
     getSocket().emit('next_album');
@@ -164,7 +186,7 @@ export default function ShowcaseView() {
             )}
 
             {/* Waterfall chat entries */}
-            <div ref={scrollRef} className="space-y-4" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            <div ref={scrollRef} className="space-y-4 hide-scrollbar" style={{ height: '60vh', overflowY: 'auto' }}>
               {showcaseEntries.length === 0 && (
                 <div className="py-8 text-center text-[#9a3556]/60 italic">Menunggu data...</div>
               )}
@@ -172,6 +194,11 @@ export default function ShowcaseView() {
               {showcaseEntries.map((entry, i) => {
                 const isImage = entry.type === 'IMAGE' || entry.type === 'EMPTY_CANVAS';
                 const onLeft = isImage; // gambar di kiri, teks di kanan
+                const isRevealed = showcaseComplete || i < revealedCount;
+                const isTyping = !showcaseComplete && i === revealedCount;
+                
+                if (i > revealedCount && !showcaseComplete) return null;
+
                 return (
                   <div key={i} className={`flex ${onLeft ? 'justify-start' : 'justify-end'}`}>
                     <div className={`flex max-w-[80%] gap-2 ${onLeft ? 'flex-row' : 'flex-row-reverse'}`}>
@@ -191,27 +218,39 @@ export default function ShowcaseView() {
                           </span>
                         </div>
 
-                        {(entry.type === 'TEXT' || entry.type === 'FALLBACK_TEXT') && (
-                          <div className={`inline-block border-[3px] border-[#4a1f2e] px-4 py-2.5 shadow-[0_3px_0_0_#4a1f2e] ${
+                        {isTyping ? (
+                          <div className={`inline-flex items-center gap-1 border-[3px] border-[#4a1f2e] px-4 py-3 shadow-[0_3px_0_0_#4a1f2e] ${
                             onLeft ? 'rounded-2xl rounded-tl-sm' : 'rounded-2xl rounded-tr-sm'
-                          } ${entry.type === 'FALLBACK_TEXT' ? 'bg-[#ffe0b8] italic text-[#9a3556]' : 'bg-[#ffe066] text-[#4a1f2e]'}`}
-                            style={{ fontWeight: 600 }}>
-                            {entry.content}
+                          } bg-[#fff8e1]`}>
+                            <div className="typing-dot h-2 w-2 rounded-full bg-[#4a1f2e]"></div>
+                            <div className="typing-dot h-2 w-2 rounded-full bg-[#4a1f2e]"></div>
+                            <div className="typing-dot h-2 w-2 rounded-full bg-[#4a1f2e]"></div>
                           </div>
-                        )}
+                        ) : (
+                          <>
+                            {(entry.type === 'TEXT' || entry.type === 'FALLBACK_TEXT') && (
+                              <div className={`inline-block border-[3px] border-[#4a1f2e] px-4 py-2.5 shadow-[0_3px_0_0_#4a1f2e] ${
+                                onLeft ? 'rounded-2xl rounded-tl-sm' : 'rounded-2xl rounded-tr-sm'
+                              } ${entry.type === 'FALLBACK_TEXT' ? 'bg-[#ffe0b8] italic text-[#9a3556]' : 'bg-[#ffe066] text-[#4a1f2e]'}`}
+                                style={{ fontWeight: 600 }}>
+                                {entry.content}
+                              </div>
+                            )}
 
-                        {entry.type === 'EMPTY_CANVAS' && (
-                          <div className="halftone flex aspect-[16/9] w-[28rem] max-w-full items-center justify-center rounded-xl border-[3px] border-dashed border-[#4a1f2e]/50 bg-[#fff8e1] text-[#4a1f2e]/60 italic">
-                            [Tidak ada gambar]
-                          </div>
-                        )}
+                            {entry.type === 'EMPTY_CANVAS' && (
+                              <div className="halftone flex aspect-[16/9] w-[28rem] max-w-full items-center justify-center rounded-xl border-[3px] border-dashed border-[#4a1f2e]/50 bg-[#fff8e1] text-[#4a1f2e]/60 italic">
+                                [Tidak ada gambar]
+                              </div>
+                            )}
 
-                        {entry.type === 'IMAGE' && (
-                          <div className="halftone w-[28rem] max-w-full overflow-hidden rounded-xl border-[3px] border-[#4a1f2e] bg-[#fff8e1] shadow-[0_3px_0_0_#4a1f2e]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={entry.content} alt={`Gambar oleh ${entry.authorName}`}
-                              className="w-full" />
-                          </div>
+                            {entry.type === 'IMAGE' && (
+                              <div className="halftone w-[28rem] max-w-full overflow-hidden rounded-xl border-[3px] border-[#4a1f2e] bg-[#fff8e1] shadow-[0_3px_0_0_#4a1f2e]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={entry.content} alt={`Gambar oleh ${entry.authorName}`}
+                                  className="w-full" />
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

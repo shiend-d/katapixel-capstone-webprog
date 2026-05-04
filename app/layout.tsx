@@ -9,7 +9,7 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: 'Katapixel — Telephone Drawing Game',
+  title: 'Katapixel',
   description: 'Permainan pesan berantai digital dengan gambar. Mainkan bersama 4-10 teman!',
 };
 
