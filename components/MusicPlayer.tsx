@@ -16,6 +16,7 @@ export default function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentSrc, setCurrentSrc] = useState(MUSIC_TRACKS.MAIN_MENU);
   const [volume, setVolume] = useState(0.3);
+  const hasInteractedRef = useRef(false);
 
   useEffect(() => {
     // Inisialisasi audio hanya di client side
@@ -28,13 +29,18 @@ export default function MusicPlayer() {
 
     // Fungsi untuk memutar musik pada interaksi pertama
     const handleFirstInteraction = () => {
+      if (hasInteractedRef.current) return;
+      hasInteractedRef.current = true;
+
+      // Hapus event listener segera
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+
       if (audioRef.current && isMuted) {
         audioRef.current.muted = false;
         audioRef.current.volume = volume;
         audioRef.current.play().then(() => {
           setIsMuted(false);
-          document.removeEventListener('click', handleFirstInteraction);
-          document.removeEventListener('keydown', handleFirstInteraction);
         }).catch(err => console.warn('Autoplay blocked:', err));
       }
     };
